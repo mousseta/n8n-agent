@@ -1,0 +1,212 @@
+networks:
+  n8n-network:
+    external: true
+    name: n8n-network
+  llmops-network:
+    external: true
+    name: llmops-network
+
+volumes:
+  db_storage:
+  redis_storage:
+  qdrant_storage:
+  n8n_storage:
+  ollama_storage:
+  open-webui_storage:
+
+services:
+  # =========================================================================
+  # 1. TUNNEL CLOUDFLARE
+  # =========================================================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: n8n_tunnel
+    restart: unless-stopped
+    networks:
+      - n8n-network
+      - llmops-network
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+
+  # =========================================================================
+  # 2. BASE DE DONNÉES RELATIONNELLE (PostgreSQL)
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: n8n_postgres
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-n8n}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-n8n_secure_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-n8n}
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================================
+  # 3. FILE D'ATTENTE (Redis)
+  # =========================================================================
+  redis:
+    image: redis:6-alpine
+    container_name: n8n_redis
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    volumes:
+      - redis_storage:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================================
+  # 4. BASE DE DONNÉES VECTORIELLE RAG (Qdrant)
+  #    Port lié à 127.0.0.1 : accessible en local (curl, dashboard) mais
+  #    PAS exposé sur Internet. Qdrant n'a aucune authentification.
+  # =========================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: n8n_qdrant
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  # =========================================================================
+  # 5. MOTEUR LLM & EMBEDDINGS LOCAUX (Ollama - CPU Mode)
+  #    Port lié à 127.0.0.1 : Ollama n'a aucune authentification.
+  # =========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: n8n_ollama
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+
+  # =========================================================================
+  # 6. APPLICATION PRINCIPALE n8n (Main/UI)
+  #    Accès public via le tunnel Cloudflare ; port hôte en 127.0.0.1
+  #    (admin local / SSH). Le tunnel joint n8n:5678 par le réseau Docker.
+  # =========================================================================
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n_app
+    restart: unless-stopped
+    networks:
+      - n8n-network
+      - llmops-network
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST:-n8n.devopssystem.com}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST:-n8n.devopssystem.com}/
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-n8n_secure_pass}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_DISABLED=false
+      # --- Fuseau horaire (désormais câblé au .env) ---
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Paris}
+      - TZ=${GENERIC_TIMEZONE:-Europe/Paris}
+      # --- Paquets NPM autorisés dans les nœuds Code (câblé au .env) ---
+      - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL}
+      # --- CORRECTION ACCÈS FICHIERS (nœud Read/Write Files from Disk) ---
+      - N8N_RESTRICT_FILE_ACCESS_TO=/files
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      # --- CORRECTION LOGS CLOUDFLARE / REVERSE PROXY ---
+      - N8N_ENFORCE_EXPRESS_TRUST_PROXY=true
+    volumes:
+      - n8n_storage:/home/node/.n8n
+      - ./n8n_data:/files
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # =========================================================================
+  # 7. WORKER n8n (Traitement des tâches lourdes & RAG)
+  # =========================================================================
+  n8n-worker:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n_worker
+    restart: unless-stopped
+    networks:
+      - n8n-network
+      - llmops-network
+    command: worker
+    environment:
+      - N8N_HOST=${N8N_HOST:-n8n.devopssystem.com}
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST:-n8n.devopssystem.com}/
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-n8n_secure_pass}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # --- Fuseau horaire (câblé au .env) ---
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Paris}
+      - TZ=${GENERIC_TIMEZONE:-Europe/Paris}
+      # --- Paquets NPM autorisés (le worker exécute réellement les nœuds Code) ---
+      - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL}
+      # --- CORRECTION ACCÈS FICHIERS (le worker exécute le nœud en mode queue) ---
+      - N8N_RESTRICT_FILE_ACCESS_TO=/files
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      # --- CORRECTION LOGS CLOUDFLARE / REVERSE PROXY ---
+      - N8N_ENFORCE_EXPRESS_TRUST_PROXY=true
+    volumes:
+      - n8n_storage:/home/node/.n8n
+      - ./n8n_data:/files
+    depends_on:
+      n8n:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # =========================================================================
+  # 8. OPEN WEB UI  (port lié à 127.0.0.1 : supervision locale)
+  # =========================================================================
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: n8n_webui
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    ports:
+      - "127.0.0.1:3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - open-webui_storage:/app/backend/data
