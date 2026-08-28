@@ -5,20 +5,21 @@ docker exec -it n8n_ollama ollama pull nomic-embed-text
 ________________________________________
 PHASE 1 — Créer les 3 credentials (une fois pour toutes)
 Dans n8n : menu de gauche → Credentials → Add credential.
-a) Ollama 
-•	Base URL : http://ollama:11434 ← nom de service, PAS localhost
-b) Qdrant 
-•	Qdrant URL : http://qdrant:6333
-•	API Key : (laisser vide)
-c) Postgres 
-•	Host : postgres
-•	Database / User / Password : ceux de ton .env n8n (POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD)
-•	Port : 5432
+a) Ollama
+•       Base URL : http://ollama:11434 ← nom de service, PAS localhost
+b) Qdrant
+•       Qdrant URL : http://qdrant:6333
+•       API Key : (laisser vide)
+c) Postgres
+•       Host : postgres
+•       Database / User / Password : ceux de ton .env n8n (POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD)
+•       Port : 5432
 ________________________________________
 PHASE 2 — Créer les 3 collections Qdrant
 for c in sop_capa reglementaire documents_qualite; do
   curl -X PUT http://localhost:6333/collections/$c \
     -H 'Content-Type: application/json' \
     -d '{"vectors": {"size": 768, "distance": "Cosine"}}'
+done
 
 Point de contrôle : curl -s http://localhost:6333/collections | python3 -m json.tool
