@@ -22,4 +22,36 @@ for c in sop_capa reglementaire documents_qualite; do
     -d '{"vectors": {"size": 768, "distance": "Cosine"}}'
 done
 
-Point de contrôle : curl -s http://localhost:6333/collections | python3 -m json.tool
+Point de contrôle pour la construction des collections : curl -s http://localhost:6333/collections | python3 -m json.tool
+
+PHASE 3 - POINTS DE CONTROLE POUR LE PEUPLEMENT DES COLLECTIONS
+Point de contrôle :
+for c in sop_capa reglementaire documents_qualite; do
+  echo -n "$c : "; curl -s http://localhost:6333/collections/$c | python3 -m json.tool | grep points_count
+done
+
+
+PHASE 4 - LA CONSTRUCTION DES PROMPTS
+
+LE CAS DU MONOLITHIQUE
+
+PROMPT 1:
+   SYSTEM MESSAGE:
+   Tu es l'assistant qualité global de NormaPharm. Tu as accès aux procédures internes, au réglementaire et aux dossiers de lot.
+   Pour chaque question, utilise le ou les outils de recherche pertinents avant de répondre, et réponds en français à partir
+   des extraits trouvés.
+
+   DESCRIPTION QDRANT: qdrant SOP_CAPA
+   Procédures internes de NormaPharm : SOP et fiches CAPA. À utiliser pour toute question sur une procédure interne ou le
+   traitement des déviations.
+
+   DESCRIPTION QDRANT: Qdrant reglementaire
+   Référentiels réglementaires externes : BPF, GMP, ISO 9001, 21 CFR Part 11. À utiliser pour toute question de conformité ou
+   d'exigence réglementaire.
+
+   DESCRIPTION QDRANT: documents_qualite :
+   Dossiers de lot et certificats d'analyse de NormaPharm. À utiliser dès qu'une question mentionne un lot, un produit, un
+   résultat d'analyse ou une spécification.
+
+   TEST:
+   La déviation sur le lot NX-2401 a-t-elle été traitée conformément aux BPF ?
