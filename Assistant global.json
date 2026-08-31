@@ -1,0 +1,494 @@
+{
+  "name": "Assistant global",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -3728,
+        -880
+      ],
+      "id": "0f081f9c-f142-4fc0-a172-924ea66d9808",
+      "name": "When chat message received",
+      "webhookId": "074e6480-e0e7-4785-aac0-dd586565524b"
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "think": false,
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -3760,
+        -704
+      ],
+      "id": "a1eb3329-14e7-42c2-8784-2fb74334e546",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.4,
+      "position": [
+        -3616,
+        -688
+      ],
+      "id": "5a7556c9-fa3f-4477-bb80-48ac37bef4c4",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "6SCWKg7DTZJ2c1B7",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Tu es l'assistant qualité de NormaPharm, un orchestrateur.\nRÈGLE ABSOLUE : tu n'as AUCUNE connaissance propre. Pour CHAQUE question, tu DOIS appeler\nle ou les experts nécessaires et répondre UNIQUEMENT à partir de ce qu'ils retournent.\nINTERDICTION STRICTE : tu ne demandes JAMAIS de clarification ni de reformulation.\nTu ne renvoies jamais la question à l'utilisateur.\nSi un expert retourne un résultat incomplet ou hors-sujet, tu réponds avec ce que tu as,\nou tu indiques que l'information précise n'a pas été trouvée.\n\"RÈGLE DE MÉMOIRE : Même si tu comprends le contexte de la question grâce à l'historique de la conversation, il t'est STRICTEMENT INTERDIT de répondre par toi-même. Tu dois obligatoirement formuler une requête et la transmettre à l'expert pour vérifier les faits avant de parler.\"\n\nExperts disponibles :\n- agent_procedures : procédures INTERNES (SOP, CAPA, nettoyage, traitement des déviations).\n- agent_reglementaire : exigences EXTERNES (Guide BPF ANSM, système qualité, réclamations).\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -3536,
+        -864
+      ],
+      "id": "4b744a9f-58e7-4d8f-b030-113ac73b7332",
+      "name": "agent orchestrateur"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Expert des procédures internes : SOP, fiches CAPA, traitement interne des déviations.\nÀ appeler pour toute question sur une pratique ou une procédure interne.\n",
+        "text": "={{ $fromAI('query', 'Question à transmettre à l\\'expert procédures', 'string') }}",
+        "options": {
+          "systemMessage": "Tu es l'expert des procédures internes de NormaPharm.\nRÈGLE ABSOLUE : tu n'as AUCUNE connaissance propre. Il t'est INTERDIT de répondre sans avoir\nd'abord appelé ton outil de recherche. Pour CHAQUE question, tu DOIS chercher, puis répondre\nUNIQUEMENT à partir des extraits retournés.\nTu appelles ton outil avec la question comme requête, jamais à vide.\nSi l'outil ne retourne rien de pertinent, réponds exactement : « Je n'ai pas trouvé d'information\ndans les procédures internes. » Tu n'inventes JAMAIS de référence, de SOP ou de numéro de CAPA.\nCite systématiquement les références trouvées (numéro de SOP, de CAPA).\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        -3504,
+        -640
+      ],
+      "id": "6ecbe4b2-5d28-44d9-94fc-b4375ecc4a83",
+      "name": "agent_procedure"
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -3504,
+        -528
+      ],
+      "id": "fca9f2aa-eb36-420c-8ebb-e06471e9ce98",
+      "name": "Ollama Chat Model1",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Base des procédures internes NormaPharm : SOP et fiches CAPA (gestion des déviations,\nnettoyage des équipements). Recherche les passages pertinents pour la question reçue.\n",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "sop_capa",
+          "mode": "list",
+          "cachedResultName": "sop_capa"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        -3360,
+        -496
+      ],
+      "id": "ed68f69a-2a8d-40b2-b0fb-b6f5ffebf97f",
+      "name": "Qdrant Vector Store",
+      "credentials": {
+        "qdrantApi": {
+          "id": "MSxfX5ek43q99oQG",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        -3360,
+        -336
+      ],
+      "id": "610e128d-de47-46ed-863d-bae92183bf87",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -3072,
+        -512
+      ],
+      "id": "d4ba8ef4-f652-4b05-9579-88f4a5587dc8",
+      "name": "Ollama Chat Model2",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Guide des Bonnes Pratiques de Fabrication (ANSM 2024). Contient notamment le Chapitre 1\n(système qualité, investigation des déviations, CAPA), le Chapitre 3 (locaux et matériel),\nle Chapitre 8 (réclamations et rappels). Recherche les exigences pertinentes pour la question.\n",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "reglementaire",
+          "mode": "list",
+          "cachedResultName": "reglementaire"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        -2928,
+        -480
+      ],
+      "id": "3c75dd05-1612-4100-8dd4-9e179df88132",
+      "name": "Qdrant Vector Store1",
+      "credentials": {
+        "qdrantApi": {
+          "id": "MSxfX5ek43q99oQG",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        -2928,
+        -320
+      ],
+      "id": "03c553db-875c-4fb2-9d95-053f8982216b",
+      "name": "Embeddings Ollama1",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Expert des exigences réglementaires externes : Guide BPF (ANSM), système qualité pharmaceutique,\ngestion des déviations et CAPA au sens réglementaire, réclamations et rappels.\nÀ appeler pour toute question sur ce qu'exige la réglementation. Ne pas appeler pour une simple\npratique interne.\n",
+        "text": "={{ $fromAI('query', 'Question à transmettre à l\\'expert réglementaire', 'string') }}",
+        "options": {
+          "systemMessage": "Tu es l'expert réglementaire de NormaPharm.\nRÈGLE ABSOLUE : tu n'as AUCUNE connaissance propre. Il t'est INTERDIT de répondre sans avoir\nd'abord appelé ton outil de recherche. Pour CHAQUE question, tu DOIS chercher, puis répondre\nUNIQUEMENT à partir des extraits retournés.\nTu appelles ton outil avec la question comme requête, jamais à vide.\nSi l'outil ne retourne rien de pertinent, réponds exactement : « Je n'ai pas trouvé d'information\ndans le référentiel réglementaire. » Tu n'inventes JAMAIS de chapitre ni d'exigence.\nCite le chapitre ou la partie du Guide BPF quand c'est possible.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        -3072,
+        -656
+      ],
+      "id": "49e88221-5c8c-4801-bf26-90368d7b32a5",
+      "name": "agent_reglementaire"
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -2624,
+        -544
+      ],
+      "id": "b7606377-3bea-4bf6-be17-5a5d8376bb12",
+      "name": "Ollama Chat Model3",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "documents_qualite",
+          "mode": "list",
+          "cachedResultName": "documents_qualite"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        -2480,
+        -512
+      ],
+      "id": "cb0f07c2-bab2-45ba-acfc-5954aed61294",
+      "name": "Qdrant Vector Store2",
+      "credentials": {
+        "qdrantApi": {
+          "id": "MSxfX5ek43q99oQG",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        -2480,
+        -352
+      ],
+      "id": "33beccb8-3ac6-4c36-a662-c37fc21db105",
+      "name": "Embeddings Ollama2",
+      "credentials": {
+        "ollamaApi": {
+          "id": "ho3wihzPmiLwBWA6",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        -2624,
+        -688
+      ],
+      "id": "ddd7c55d-5810-4cc5-9646-64ee4a4260b3",
+      "name": "agent_documentaire"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "agent orchestrateur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "agent orchestrateur",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        []
+      ]
+    },
+    "agent_procedure": {
+      "ai_tool": [
+        [
+          {
+            "node": "agent orchestrateur",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "agent_procedure",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store": {
+      "ai_tool": [
+        [
+          {
+            "node": "agent_procedure",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "agent_reglementaire",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store1": {
+      "ai_tool": [
+        [
+          {
+            "node": "agent_reglementaire",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent_reglementaire": {
+      "ai_tool": [
+        [
+          {
+            "node": "agent orchestrateur",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "agent_documentaire",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store2": {
+      "ai_tool": [
+        [
+          {
+            "node": "agent_documentaire",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store2",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent_documentaire": {
+      "ai_tool": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1825ed8d-350c-40b4-8b2e-8fb43c2690ef",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac8c766e45259ea1e4d1a314583af0e304e6346c4b60a2ceec16106bd7b5fe33"
+  },
+  "nodeGroups": [],
+  "id": "7SNwIWTGBnPFRQ92",
+  "tags": []
+}
